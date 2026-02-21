@@ -1,6 +1,6 @@
 "use client";
 import Script from "next/script";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useTheme } from "next-themes";
 import {
   ChartingLibraryWidgetOptions,
@@ -9,9 +9,15 @@ import {
 import { IDatafeed, IOhlcvData } from "@/types/datafeed.type";
 import { getDataFeed } from "@/services/http/token.http";
 import { useQuery } from "@tanstack/react-query";
-import MyTradingView from "./MyTradingView";
+import MyTradingView, { TradingViewRef } from "./MyTradingView";
 import dynamic from "next/dynamic";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const TVChartContainer = dynamic(
   () => import("./TVChartContainer").then((mod) => mod.TVChartContainer),
@@ -30,37 +36,13 @@ const defaultWidgetProps: Partial<ChartingLibraryWidgetOptions> = {
   autosize: true,
   debug: true,
   time_frames: [
-    {
-      text: "10m",
-      resolution: "10" as ResolutionString,
-      description: "10 Minutes",
-    },
-    {
-      text: "15m",
-      resolution: "15" as ResolutionString,
-      description: "15 Minutes",
-    },
-    {
-      text: "30m",
-      resolution: "30" as ResolutionString,
-      description: "30 Minutes",
-    },
+    { text: "10m", resolution: "10" as ResolutionString, description: "10 Minutes" },
+    { text: "15m", resolution: "15" as ResolutionString, description: "15 Minutes" },
+    { text: "30m", resolution: "30" as ResolutionString, description: "30 Minutes" },
     { text: "1H", resolution: "60" as ResolutionString, description: "1 Hour" },
-    {
-      text: "4H",
-      resolution: "240" as ResolutionString,
-      description: "4 Hours",
-    },
-    {
-      text: "8H",
-      resolution: "480" as ResolutionString,
-      description: "8 Hours",
-    },
-    {
-      text: "12H",
-      resolution: "720" as ResolutionString,
-      description: "12 Hours",
-    },
+    { text: "4H", resolution: "240" as ResolutionString, description: "4 Hours" },
+    { text: "8H", resolution: "480" as ResolutionString, description: "8 Hours" },
+    { text: "12H", resolution: "720" as ResolutionString, description: "12 Hours" },
     { text: "D", resolution: "D" as ResolutionString, description: "1 Day" },
     { text: "3D", resolution: "3D" as ResolutionString, description: "3 Day" },
     { text: "W", resolution: "W" as ResolutionString, description: "1 Week" },
@@ -75,6 +57,10 @@ interface Props {
   tokenExchange: string;
 }
 
+export interface ChartRef {
+  compare: (symbol: string) => void;
+}
+
 export default function Chart({
   tokenAddress,
   network,
@@ -83,6 +69,7 @@ export default function Chart({
   className,
 }: Props) {
   const [isScriptReady, setIsScriptReady] = useState(false);
+  const tradingRef = useRef<TradingViewRef>(null);
 
   const fetchData = async (
     timeframe: string,
@@ -152,16 +139,16 @@ export default function Chart({
         hourTime === minTime &&
         dayTime === minTime
       ) {
-        mergedData.push(dayData[k]); // Prefer dayData when all match
+        mergedData.push(dayData[k]);
         i++;
         j++;
         k++;
       } else if (hourTime === minTime && minuteTime === minTime) {
-        mergedData.push(hourData[j]); // Prefer hourData over minuteData
+        mergedData.push(hourData[j]);
         i++;
         j++;
       } else if (dayTime === minTime && hourTime === minTime) {
-        mergedData.push(dayData[k]); // Prefer dayData over hourData
+        mergedData.push(dayData[k]);
         j++;
         k++;
       } else if (dayTime === minTime) {
@@ -186,17 +173,12 @@ export default function Chart({
 
   const [ohlcvData, setOhlcvData] = useState<any>([]);
   useEffect(() => {
-    console.log("triggered | data changed");
-    // Define the resolutions that should use only the daily data
     const dailyResolutions = ["1440", "D", "3D", "W", "M"];
-    // Provide a fallback value in case defaultWidgetProps.interval is undefined.
     const currentInterval = defaultWidgetProps.interval || "4H";
 
     if (dailyResolutions.includes(currentInterval)) {
-      // For daily or higher resolutions, use only the day data from the API
       setOhlcvData(isSuccess ? getOhlcvData(dayDatafeed!) : []);
     } else {
-      // For lower resolutions, merge minute, hour, and day data
       setOhlcvData(
         isSuccess
           ? mergeData(
@@ -217,13 +199,40 @@ export default function Chart({
         src="/static/datafeeds/udf/dist/bundle.js"
         strategy="lazyOnload"
         onLoad={() => console.log("chart script loaded")}
-        onReady={() => {
-          setIsScriptReady(true);
-        }}
+        onReady={() => setIsScriptReady(true)}
       />
       {isSuccess && ohlcvData.length > 0 ? (
         <div className="h-full w-full my-6 md:my-7">
+          {/* ✅ Compare Dropdown */}
+          <div className="flex justify-end mb-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="border px-3 py-1 rounded text-sm">
+                  Compare
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() =>
+                    tradingRef.current?.addCompare("BINANCE:BTCUSDT")
+                  }
+                >
+                  BTC
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    tradingRef.current?.addCompare("BINANCE:ETHUSDT")
+                  }
+                >
+                  ETH
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* ✅ MyTradingView with ref */}
           <MyTradingView
+            ref={tradingRef}
             chartOptions={{
               ...defaultWidgetProps,
               symbol:

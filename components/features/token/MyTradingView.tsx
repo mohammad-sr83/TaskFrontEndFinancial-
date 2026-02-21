@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+"use client";
+
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import {
   ChartingLibraryWidgetOptions,
   IBasicDataFeed,
@@ -8,6 +16,11 @@ import {
 } from "@/public/static/charting_library";
 import { IOhlcvData } from "@/types/datafeed.type";
 import { usePathname } from "next/navigation";
+import { formatCryptoPrice } from "@/utils/formatPrice";
+
+export interface TradingViewRef {
+  addCompare: (symbol: string) => void;
+}
 
 interface Props {
   chartOptions: Partial<ChartingLibraryWidgetOptions>;
@@ -25,26 +38,45 @@ interface Props {
 
 let intervalId: NodeJS.Timeout;
 
-const MyTradingView = ({
-  chartOptions,
-  ohlcvData,
-  theme,
-  tokenDescription,
-  tokenExchange,
-  customSymbols = [],
-}: Props) => {
-  const chartContainerRef =
-    useRef<HTMLDivElement>() as React.MutableRefObject<HTMLInputElement>;
-  const [chartIsReady, setChartIsReady] = useState(false);
-  const myWidget = useRef<any>();
-  const pathname = usePathname();
+const MyTradingView = forwardRef<TradingViewRef, Props>(
+  (
+    {
+      chartOptions,
+      ohlcvData,
+      theme,
+      tokenDescription,
+      tokenExchange,
+      customSymbols = [],
+    },
+    ref,
+  ) => {
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const [chartIsReady, setChartIsReady] = useState(false);
+    const widgetRef = useRef<any>(null);
+    const pathname = usePathname();
 
-  const dataFeed = (
-    ohlcvData: IOhlcvData[],
-    tokenDescription: string,
-    tokenExchange: string
-  ): IBasicDataFeed | (IBasicDataFeed & IDatafeedQuotesApi) => {
-    return {
+    /* =====================
+       EXPOSE METHODS
+    ===================== */
+    useImperativeHandle(ref, () => ({
+      addCompare(symbol: string) {
+        if (!widgetRef.current || !chartIsReady) return;
+
+        widgetRef.current.activeChart().createStudy(
+          "Compare",
+          false,
+          false,
+          { symbol },
+        );
+      },
+    }));
+
+    /* =====================
+       DATAFEED
+    ===================== */
+    const dataFeed = (
+      ohlcvData: IOhlcvData[],
+    ): IBasicDataFeed | (IBasicDataFeed & IDatafeedQuotesApi) => ({
       onReady: (callback) => {
         setTimeout(
           () =>
@@ -67,9 +99,10 @@ const MyTradingView = ({
               supports_timescale_marks: true,
               supports_time: true,
             }),
-          0
+          0,
         );
       },
+
       resolveSymbol: (symbolName, onSymbolResolvedCallback) => {
         setTimeout(() => {
           onSymbolResolvedCallback({
@@ -102,15 +135,14 @@ const MyTradingView = ({
           });
         }, 0);
       },
-      getBars: (symbolInfo, resolution, periodParams, onResult, onError) => {
-        setTimeout(() => {
-          let bars = [];
 
-          bars = ohlcvData
+      getBars: (symbolInfo, resolution, periodParams, onResult) => {
+        setTimeout(() => {
+          const bars = ohlcvData
             .filter(
               (bar) =>
-                bar.time * 1000 >= periodParams.from * 1000 &&
-                bar.time * 1000 <= periodParams.to * 1000
+                bar.time >= periodParams.from &&
+                bar.time <= periodParams.to,
             )
             .map((bar) => ({
               time: bar.time * 1000,
@@ -121,38 +153,29 @@ const MyTradingView = ({
               volume: bar.volume,
             }));
 
-          if (bars.length) {
-            onResult(bars, { noData: false });
-          } else {
-            onResult([], { noData: true });
-          }
+          onResult(bars, { noData: !bars.length });
         }, 50);
       },
+
       subscribeBars: (symbolInfo, resolution, onRealtimeCallback) => {
         intervalId = setInterval(() => {
-          const latestBar = {
-            time: ohlcvData[ohlcvData.length - 1].time * 1000,
-            open: ohlcvData[ohlcvData.length - 1].open,
-            high: ohlcvData[ohlcvData.length - 1].high,
-            low: ohlcvData[ohlcvData.length - 1].low,
-            close: ohlcvData[ohlcvData.length - 1].close,
-            volume: ohlcvData[ohlcvData.length - 1].volume,
-          };
+          const last = ohlcvData.at(-1);
+          if (!last) return;
 
-          if (latestBar) {
-            onRealtimeCallback(latestBar);
-          }
+          onRealtimeCallback({
+            time: last.time * 1000,
+            open: last.open,
+            high: last.high,
+            low: last.low,
+            close: last.close,
+            volume: last.volume,
+          });
         }, 10000);
       },
-      unsubscribeBars: () => {
-        clearInterval(intervalId);
-      },
-      searchSymbols: (
-        userInput,
-        exchange,
-        symbolType,
-        onResultReadyCallback
-      ) => {
+
+      unsubscribeBars: () => clearInterval(intervalId),
+
+      searchSymbols: (userInput, exchange, symbolType, onResult) => {
         const defaultSymbols = [
           {
             symbol: "TURBO",
@@ -163,75 +186,83 @@ const MyTradingView = ({
 
         const symbols = [...defaultSymbols, ...customSymbols];
 
-        const filteredSymbols = symbols
-          .filter((symbol) =>
-            symbol.full_name.toLowerCase().includes(userInput.toLowerCase())
+        const filtered = symbols
+          .filter((s) =>
+            s.full_name.toLowerCase().includes(userInput.toLowerCase()),
           )
-          .map((symbol) => ({
-            ...symbol,
+          .map((s) => ({
+            ...s,
             exchange: tokenExchange,
             type: "crypto",
           }));
 
-        onResultReadyCallback(filteredSymbols);
+        onResult(filtered);
       },
-    };
-  };
+    });
 
-  useEffect(() => {
-    const widgetOptions: ChartingLibraryWidgetOptions = {
-      symbol: chartOptions.symbol || "DefaultSymbol",
-      datafeed: dataFeed(ohlcvData, tokenDescription, tokenExchange),
-      interval:
-        (chartOptions.interval as ResolutionString) ||
-        ("4H" as ResolutionString),
-      container: chartContainerRef.current,
-      library_path: chartOptions.library_path,
-      locale: "en",
-      debug: true,
-      disabled_features: ["use_localstorage_for_settings"],
-      enabled_features: ["study_templates"],
-      charts_storage_url: chartOptions.charts_storage_url,
-      charts_storage_api_version: chartOptions.charts_storage_api_version,
-      client_id: chartOptions.client_id,
-      user_id: chartOptions.user_id,
-      fullscreen: chartOptions.fullscreen,
-      autosize: chartOptions.autosize,
-      timezone: "Etc/UTC",
-      theme: theme || "dark",
-    };
+    /* =====================
+       INIT WIDGET
+    ===================== */
+    useEffect(() => {
+      if (!chartContainerRef.current) return;
 
-    myWidget.current = new TradingViewWidget(widgetOptions);
+      const widgetOptions: ChartingLibraryWidgetOptions = {
+        symbol: chartOptions.symbol || "BTCUSDT",
+        datafeed: dataFeed(ohlcvData),
+        interval:
+          (chartOptions.interval as ResolutionString) ||
+          ("4H" as ResolutionString),
+        container: chartContainerRef.current,
+        library_path: chartOptions.library_path,
+        locale: "en",
+        disabled_features: ["use_localstorage_for_settings"],
+        enabled_features: ["study_templates"],
+        timezone: "Etc/UTC",
+        theme,
+        custom_formatters: {
+          priceFormatter: {
+            format: (price: number) => formatCryptoPrice(price),
+          },
+        } as any,
+      };
 
-    return () => {
-      myWidget.current.remove();
-    };
-  }, [pathname]);
+      widgetRef.current = new TradingViewWidget(widgetOptions);
 
-  useEffect(() => {
-    if (myWidget.current) {
-      myWidget.current.onChartReady(() => {
+      return () => {
+        widgetRef.current?.remove();
+        clearInterval(intervalId);
+      };
+    }, [pathname]);
+
+    /* =====================
+       READY
+    ===================== */
+    useEffect(() => {
+      if (!widgetRef.current) return;
+
+      widgetRef.current.onChartReady(() => {
         setChartIsReady(true);
       });
-    }
-  }, [myWidget]);
+    }, []);
 
-  useEffect(() => {
-    if (chartIsReady) myWidget.current.changeTheme(theme);
-  }, [theme, chartIsReady]);
+    /* =====================
+       THEME
+    ===================== */
+    useEffect(() => {
+      if (chartIsReady) {
+        widgetRef.current.changeTheme(theme);
+      }
+    }, [theme, chartIsReady]);
 
-  useEffect(() => {
-    if (chartIsReady) {
-      myWidget.current._options.datafeed = dataFeed(
-        ohlcvData,
-        tokenDescription,
-        tokenExchange
-      );
-      myWidget.current.activeChart().resetData();
-    }
-  }, [ohlcvData, tokenDescription, tokenExchange, chartIsReady]);
+    useEffect(() => {
+      if (!chartIsReady) return;
 
-  return <div ref={chartContainerRef} className={"TVChartContainer"} />;
-};
+      widgetRef.current._options.datafeed = dataFeed(ohlcvData);
+      widgetRef.current.activeChart().resetData();
+    }, [ohlcvData, chartIsReady]);
+
+    return <div ref={chartContainerRef} className="TVChartContainer" />;
+  },
+);
 
 export default MyTradingView;

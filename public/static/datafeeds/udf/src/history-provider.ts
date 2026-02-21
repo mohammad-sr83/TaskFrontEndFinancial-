@@ -1,239 +1,134 @@
 import {
-	Bar,
-	HistoryMetadata,
-	LibrarySymbolInfo,
-	PeriodParams,
-} from '../../../charting_library/datafeed-api';
+  Bar,
+  HistoryMetadata,
+  LibrarySymbolInfo,
+  PeriodParams,
+} from "../../../charting_library/datafeed-api";
 
 import {
-	getErrorMessage,
-	RequestParams,
-	UdfErrorResponse,
-	UdfOkResponse,
-	UdfResponse,
-} from './helpers';
+  getErrorMessage,
+  RequestParams,
+  UdfErrorResponse,
+  UdfOkResponse,
+  UdfResponse,
+} from "./helpers";
 
-import { IRequester } from './irequester';
-// tslint:disable: no-any
+import { IRequester } from "./irequester";
+
 interface HistoryPartialDataResponse extends UdfOkResponse {
-	t: any;
-	c: any;
-	o?: never;
-	h?: never;
-	l?: never;
-	v?: never;
+  t: any;
+  c: any;
 }
 
 interface HistoryFullDataResponse extends UdfOkResponse {
-	t: any;
-	c: any;
-	o: any;
-	h: any;
-	l: any;
-	v: any;
+  t: any;
+  c: any;
+  o: any;
+  h: any;
+  l: any;
+  v: any;
 }
-// tslint:enable: no-any
+
 interface HistoryNoDataResponse extends UdfResponse {
-	s: 'no_data';
-	nextTime?: number;
+  s: "no_data";
+  nextTime?: number;
 }
 
-type HistoryResponse = HistoryFullDataResponse | HistoryPartialDataResponse | HistoryNoDataResponse;
-
-export type PeriodParamsWithOptionalCountback = Omit<PeriodParams, 'countBack'> & { countBack?: number };
+type HistoryResponse =
+  | HistoryFullDataResponse
+  | HistoryPartialDataResponse
+  | HistoryNoDataResponse;
 
 export interface GetBarsResult {
-	bars: Bar[];
-	meta: HistoryMetadata;
-}
-
-export interface LimitedResponseConfiguration {
-	/**
-	 * Set this value to the maximum number of bars which
-	 * the data backend server can supply in a single response.
-	 * This doesn't affect or change the library behavior regarding
-	 * how many bars it will request. It just allows this Datafeed
-	 * implementation to correctly handle this situation.
-	 */
-	maxResponseLength: number;
-	/**
-	 * If the server can't return all the required bars in a single
-	 * response then `expectedOrder` specifies whether the server
-	 * will send the latest (newest) or earliest (older) data first.
-	 */
-	expectedOrder: 'latestFirst' | 'earliestFirst';
+  bars: Bar[];
+  meta: HistoryMetadata;
 }
 
 export class HistoryProvider {
-	private _datafeedUrl: string;
-	private readonly _requester: IRequester;
-	private readonly _limitedServerResponse?: LimitedResponseConfiguration;
+  private _datafeedUrl: string;
+  private readonly _requester: IRequester;
 
-	public constructor(
-		datafeedUrl: string,
-		requester: IRequester,
-		limitedServerResponse?: LimitedResponseConfiguration
-	) {
-		this._datafeedUrl = datafeedUrl;
-		this._requester = requester;
-		this._limitedServerResponse = limitedServerResponse;
-	}
+  public constructor(datafeedUrl: string, requester: IRequester) {
+    this._datafeedUrl = datafeedUrl;
+    this._requester = requester;
+  }
 
-	public getBars(
-		symbolInfo: LibrarySymbolInfo,
-		resolution: string,
-		periodParams: PeriodParamsWithOptionalCountback
-	): Promise<GetBarsResult> {
-		const requestParams: RequestParams = {
-			symbol: symbolInfo.ticker || '',
-			resolution: resolution,
-			from: periodParams.from,
-			to: periodParams.to,
-		};
-		if (periodParams.countBack !== undefined) {
-			requestParams.countback = periodParams.countBack;
-		}
+  public getBars(
+    symbolInfo: LibrarySymbolInfo,
+    resolution: string,
+    periodParams: PeriodParams,
+  ): Promise<GetBarsResult> {
+    const requestParams: RequestParams = {
+      symbol: symbolInfo.ticker || "",
+      resolution: resolution,
+      from: periodParams.from,
+      to: periodParams.to,
+    };
 
-		if (symbolInfo.currency_code !== undefined) {
-			requestParams.currencyCode = symbolInfo.currency_code;
-		}
+    return new Promise(async (resolve, reject) => {
+      try {
+        const response = await this._requester.sendRequest<HistoryResponse>(
+          this._datafeedUrl,
+          "history",
+          requestParams,
+        );
 
-		if (symbolInfo.unit_id !== undefined) {
-			requestParams.unitId = symbolInfo.unit_id;
-		}
+        resolve(this._processHistoryResponse(response));
+      } catch (e: unknown) {
+        reject(getErrorMessage(e as any));
+      }
+    });
+  }
 
-		return new Promise(
-			async (
-				resolve: (result: GetBarsResult) => void,
-				reject: (reason: string) => void
-			) => {
-				try {
-					const initialResponse = await this._requester.sendRequest<HistoryResponse>(
-						this._datafeedUrl,
-						'history',
-						requestParams
-					);
-					const result = this._processHistoryResponse(initialResponse);
+  private _processHistoryResponse(
+    response: HistoryResponse | UdfErrorResponse,
+  ): GetBarsResult {
+    if (response.s !== "ok" && response.s !== "no_data") {
+      throw new Error(response.errmsg);
+    }
 
-					if (this._limitedServerResponse) {
-						await this._processTruncatedResponse(result, requestParams);
-					}
-					resolve(result);
-				} catch (e: unknown) {
-					if (e instanceof Error || typeof e === 'string') {
-						const reasonString = getErrorMessage(e);
-						// tslint:disable-next-line:no-console
-						console.warn(
-							`HistoryProvider: getBars() failed, error=${reasonString}`
-						);
-						reject(reasonString);
-					}
-				}
-			}
-		);
-	}
+    const bars: Bar[] = [];
+    const meta: HistoryMetadata = { noData: false };
 
-	private async _processTruncatedResponse(result: GetBarsResult, requestParams: RequestParams) {
-		let lastResultLength = result.bars.length;
-		try {
-			while (this._limitedServerResponse &&
-				this._limitedServerResponse.maxResponseLength > 0 &&
-				this._limitedServerResponse.maxResponseLength === lastResultLength &&
-				requestParams.from < requestParams.to) {
-				// adjust request parameters for follow-up request
-				if (requestParams.countback) {
-					requestParams.countback = (requestParams.countback as number) - lastResultLength;
-				}
-				if (this._limitedServerResponse.expectedOrder === 'earliestFirst') {
-					requestParams.from = Math.round(result.bars[result.bars.length - 1].time / 1000);
-				} else {
-					requestParams.to = Math.round(result.bars[0].time / 1000);
-				}
+    if (response.s === "no_data") {
+      meta.noData = true;
+      meta.nextTime = response.nextTime;
+      return { bars, meta };
+    }
 
-				const followupResponse = await this._requester.sendRequest<HistoryResponse>(
-					this._datafeedUrl,
-					'history',
-					requestParams
-				);
-				const followupResult = this._processHistoryResponse(
-					followupResponse
-				);
-				lastResultLength = followupResult.bars.length;
-				// merge result with results collected so far
-				if (this._limitedServerResponse.expectedOrder === 'earliestFirst') {
-					if (followupResult.bars[0].time === result.bars[result.bars.length - 1].time) {
-						// Datafeed shouldn't include a value exactly matching the `to` timestamp but in case it does
-						// we will remove the duplicate.
-						followupResult.bars.shift();
-					}
-					result.bars.push(...followupResult.bars);
-				} else {
-					if (followupResult.bars[followupResult.bars.length - 1].time === result.bars[0].time) {
-						// Datafeed shouldn't include a value exactly matching the `to` timestamp but in case it does
-						// we will remove the duplicate.
-						followupResult.bars.pop();
-					}
-					result.bars.unshift(...followupResult.bars);
-				}
-			}
-		} catch (e: unknown) {
-			/**
-			 * Error occurred during followup request. We won't reject the original promise
-			 * because the initial response was valid so we will return what we've got so far.
-			 */
-			if (e instanceof Error || typeof e === 'string') {
-				const reasonString = getErrorMessage(e);
-				// tslint:disable-next-line:no-console
-				console.warn(
-					`HistoryProvider: getBars() warning during followup request, error=${reasonString}`
-				);
-			}
-		}
-	}
+    const volumePresent = "v" in response;
+    const ohlPresent = "o" in response;
 
-	private _processHistoryResponse(response: HistoryResponse | UdfErrorResponse) {
-		if (response.s !== 'ok' && response.s !== 'no_data') {
-			throw new Error(response.errmsg);
-		}
+    for (let i = 0; i < response.t.length; i++) {
+      let time = response.t[i];
 
-		const bars: Bar[] = [];
-		const meta: HistoryMetadata = {
-			noData: false,
-		};
+      if (time < 10_000_000_000) {
+        time *= 1000;
+      }
 
-		if (response.s === 'no_data') {
-			meta.noData = true;
-			meta.nextTime = response.nextTime;
-		} else {
-			const volumePresent = response.v !== undefined;
-			const ohlPresent = response.o !== undefined;
+      const bar: Bar = {
+        time,
+        close: Number(response.c[i]),
+        open: Number(response.c[i]),
+        high: Number(response.c[i]),
+        low: Number(response.c[i]),
+      };
 
-			for (let i = 0; i < response.t.length; ++i) {
-				const barValue: Bar = {
-					time: response.t[i] * 1000,
-					close: parseFloat(response.c[i]),
-					open: parseFloat(response.c[i]),
-					high: parseFloat(response.c[i]),
-					low: parseFloat(response.c[i]),
-				};
+      if (ohlPresent) {
+        bar.open = Number((response as HistoryFullDataResponse).o[i]);
+        bar.high = Number((response as HistoryFullDataResponse).h[i]);
+        bar.low = Number((response as HistoryFullDataResponse).l[i]);
+      }
 
-				if (ohlPresent) {
-					barValue.open = parseFloat((response as HistoryFullDataResponse).o[i]);
-					barValue.high = parseFloat((response as HistoryFullDataResponse).h[i]);
-					barValue.low = parseFloat((response as HistoryFullDataResponse).l[i]);
-				}
+      if (volumePresent) {
+        bar.volume = Number((response as HistoryFullDataResponse).v[i]);
+      }
 
-				if (volumePresent) {
-					barValue.volume = parseFloat((response as HistoryFullDataResponse).v[i]);
-				}
+      bars.push(bar);
+    }
 
-				bars.push(barValue);
-			}
-		}
+    bars.sort((a, b) => a.time - b.time);
 
-		return {
-			bars: bars,
-			meta: meta,
-		};
-	}
+    return { bars, meta };
+  }
 }
