@@ -132,7 +132,6 @@ export class UDFCompatibleDatafeedBase implements IExternalDatafeed, IDatafeedQu
 		this._historyProvider = new HistoryProvider(
 			datafeedURL,
 			this._requester,
-			limitedServerResponse
 		);
 		this._quotesProvider = quotesProvider;
 
