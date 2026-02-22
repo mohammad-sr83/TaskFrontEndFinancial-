@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import {
   AccordionContent,
@@ -32,7 +30,7 @@ function TokenAccordion({
                 className="w-1/6 object-cover rounded-lg ml-auto"
               />
             </AccordionTrigger>
-            <AccordionContent className="px-4 py-8 text-left">
+            <AccordionContent forceMount className="px-4 py-8 text-left">
               <div
                 className="token-content-description"
                 dangerouslySetInnerHTML={{ __html: tokenDescription }}

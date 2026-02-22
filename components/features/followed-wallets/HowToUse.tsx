@@ -4,7 +4,7 @@ import HowToUseTrackedWalletAccordionItem from "./HowToUseTrackedWalletAccordion
 
 function HowToUse() {
   return (
-    <Accordion type="single" collapsible className="w-full mt-3">
+    <Accordion type="single"  collapsible className="w-full mt-3">
       <HowToUseTrackedWalletAccordionItem />
     </Accordion>
   );

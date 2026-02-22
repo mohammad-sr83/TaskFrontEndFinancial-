@@ -8,7 +8,7 @@ function HowToUseTrackedWalletAccordionItem() {
       <AccordionTrigger className="text-left rounded-xl transition-colors h-[48px] pl-4 my-2">
         How to Use Tracked Wallets on DexTrading – A Complete Guide
       </AccordionTrigger>
-      <AccordionContent className="px-4 py-8 text-left">
+      <AccordionContent forceMount className="px-4 py-8 text-left">
         <h3 className="text-xl">
           How to Use Tracked Wallets on DexTrading – A Complete Guide
         </h3>
