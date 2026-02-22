@@ -8,7 +8,7 @@ import { RiExchangeDollarFill } from "react-icons/ri";
 import TokenSummary from "./TokenSummary";
 import TokenMarkets from "./Token-markets";
 import TokenScoring from "./Token-scoring";
-import TokenSecurityOldShit from "./TokenSecurity-old-shit/TokenSecurity";
+// import TokenSecurityOldShit from "./TokenSecurity-old-shit/TokenSecurity";
 import RenderConditionalComponent from "@/components/common/RenderConditionalComponent";
 import TokenHolders from "./TokenHolders-old-dex/TokenHolders";
 import Paywall from "@/components/common/Paywall";
@@ -116,7 +116,7 @@ function MobileNavigator({
         <TokenScoring token={token} />
       </TabsContent>
       <TabsContent value="security" className="mt-5">
-        <TokenSecurityOldShit token={token} tokenAddress={tokenAddress} />
+        {/* <TokenSecurityOldShit token={token} tokenAddress={tokenAddress} /> */}
       </TabsContent>
       <TabsContent value="holders" className="mt-5">
         <RenderConditionalComponent

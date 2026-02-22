@@ -10,7 +10,7 @@ import { IoShieldHalfOutline } from "react-icons/io5";
 import { GrStakeholder } from "react-icons/gr";
 import RenderConditionalComponent from "@/components/common/RenderConditionalComponent";
 import Paywall from "@/components/common/Paywall";
-import TokenSecurityOldShit from "./TokenSecurity-old-shit/TokenSecurity";
+// import TokenSecurityOldShit from "./TokenSecurity-old-shit/TokenSecurity";
 import TokenHolders from "./TokenHolders-old-dex/TokenHolders";
 import TokenMarkets from "./Token-markets";
 import TokenScoring from "./Token-scoring";
@@ -107,7 +107,7 @@ export default function TokenDetail({
         <TabsContent value="security" className="mt-5">
           {/* FIXME: contract security must be uncommented and updated to replace the old next line */}
           {/* <ContractSecurity token={token} /> */}
-          <TokenSecurityOldShit token={token} tokenAddress={tokenAddress} />
+          {/* <TokenSecurityOldShit token={token} tokenAddress={tokenAddress} /> */}
         </TabsContent>
         <TabsContent value="holders" className="mt-5">
           <ErrorBoundary>

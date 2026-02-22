@@ -4,8 +4,6 @@ import CentralizedExchange from "./CentralizedExchange";
 import DecentralizedExchange from "./DecentralizedExchange";
 import { IToken } from "@/types/token.type";
 import { Progress } from "@/components/ui/progress";
-import TokenSecurityBox from "./TokenSecurity-old-shit/TokenSecurityBox";
-import TokenSecurityCallActivity from "./TokenSecurity-old-shit/TokenSecurityCallActivity";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import NewExchangeTable from "./NewExchangeTable";
 import { ErrorBoundary } from "@/components/common/ErrorBoundry";
