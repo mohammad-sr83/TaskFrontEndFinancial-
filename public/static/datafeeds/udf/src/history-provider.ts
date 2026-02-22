@@ -132,3 +132,12 @@ export class HistoryProvider {
     return { bars, meta };
   }
 }
+export interface LimitedResponseConfiguration {
+  maxBars?: number;
+  minBars?: number;
+  includePartial?: boolean;
+}
+
+export interface PeriodParamsWithOptionalCountback extends PeriodParams {
+  countback?: number;
+}
