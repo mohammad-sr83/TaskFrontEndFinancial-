@@ -28,6 +28,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "DexTrading",
   description: "Unlock advanced crypto trading insights with DexTrading.",
+  metadataBase: new URL("https://taskforntendsoleimani.netlify.app"),
   openGraph: {
     title: "DexTrading",
     description: "Unlock advanced crypto trading insights with DexTrading.",
