@@ -230,7 +230,6 @@ export default function Chart({
             </DropdownMenu>
           </div>
 
-          {/* ✅ MyTradingView with ref */}
           <MyTradingView
             ref={tradingRef}
             chartOptions={{

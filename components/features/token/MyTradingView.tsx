@@ -265,4 +265,6 @@ const MyTradingView = forwardRef<TradingViewRef, Props>(
   },
 );
 
+MyTradingView.displayName = "MyTradingView";
+
 export default MyTradingView;
