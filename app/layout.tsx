@@ -52,6 +52,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  
   const projectId = "mik57uafy0";
 
   Clarity.init(projectId);
